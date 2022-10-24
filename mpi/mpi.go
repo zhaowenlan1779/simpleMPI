@@ -332,40 +332,29 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 
 // If Master calls this function, rank is required
 // If Slave calls this function, rank is not required, it will send to Master
-func SendBytes(buf []byte, rank uint64) {
+func SendBytes(buf []byte, rank uint64) error {
+	var errorMsg error
+	errorMsg = nil
 	if SelfRank == 0 {
-		_, err := (*MasterToSlaveTCPConn[rank]).Write(buf)
-		if err != nil {
-			fmt.Println(err)
-			panic("Failed to send bytes: " + err.Error())
-		}
+		_, errorMsg = (*MasterToSlaveTCPConn[rank]).Write(buf)
 	} else {
-		_, err := (*SlaveToMasterTCPConn).Write(buf)
-		if err != nil {
-			fmt.Println(err)
-			panic("Failed to send bytes: " + err.Error())
-		}
+		_, errorMsg = (*SlaveToMasterTCPConn).Write(buf)
 	}
+	return errorMsg
 }
 
 // If Master calls this function, rank is required, it will receive from rank-th slave
 // If Slave calls this function, rank is not required, it will receive from Master
-func ReceiveBytes(size uint64, rank uint64) []byte {
+func ReceiveBytes(size uint64, rank uint64) ([]byte, error) {
 	buf := make([]byte, size)
+	var errorMsg error
+	errorMsg = nil
 	if SelfRank == 0 {
-		_, err := (*MasterToSlaveTCPConn[rank]).Read(buf)
-		if err != nil {
-			fmt.Println(err)
-			panic("Failed to receive bytes: " + err.Error())
-		}
+		_, errorMsg = (*MasterToSlaveTCPConn[rank]).Read(buf)
 	} else {
-		_, err := (*SlaveToMasterTCPConn).Read(buf)
-		if err != nil {
-			fmt.Println(err)
-			panic("Failed to receive bytes: " + err.Error())
-		}
+		_, errorMsg = (*SlaveToMasterTCPConn).Read(buf)
 	}
-	return buf
+	return buf, errorMsg
 }
 
 func Close() {
