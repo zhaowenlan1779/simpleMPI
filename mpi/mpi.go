@@ -98,6 +98,7 @@ var (
 	SlaveOutputs          []bytes.Buffer
 	BytesSent             uint64
 	BytesReceived         uint64
+	WorldSize             uint64
 )
 
 func SetIPPool(filePath string, world *MPIWorld) error {
@@ -323,6 +324,7 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 		}
 		world = DeserializeWorld(buf)
 	}
+	WorldSize = world.size
 	return world
 }
 
