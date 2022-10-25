@@ -96,6 +96,8 @@ var (
 	SlaveToMasterTCPConn  *net.Conn
 	MasterToSlaveListener []*net.Listener
 	SlaveOutputs          []bytes.Buffer
+	BytesSent             uint64
+	BytesReceived         uint64
 )
 
 func SetIPPool(filePath string, world *MPIWorld) error {
@@ -217,7 +219,6 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 
 			//run the command async and panic when command return error
 			go func() {
-				fmt.Println("Running command: " + Command)
 				defer session.Close()
 				session.Stdout = &SlaveOutputs[i]
 				err := session.Run(Command)
@@ -264,7 +265,6 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 				fmt.Println(err)
 				panic("Failed to send rank: " + err.Error())
 			}
-			fmt.Println("Sent rank " + strconv.Itoa(i))
 
 			// Sync the world state
 			buf = SerializeWorld(world)
@@ -278,8 +278,6 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 				panic("Failed to send buf size: " + err.Error())
 			}
 
-			fmt.Println("Sent buf size " + strconv.Itoa(i))
-
 			//Send buf
 			_, err = TCPConn.Write(buf)
 			if err != nil {
@@ -287,7 +285,6 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 				panic("Failed to send world: " + err.Error())
 			}
 
-			fmt.Println("Sent world " + strconv.Itoa(i))
 		}
 	} else {
 		// connect to master
@@ -306,7 +303,6 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 			fmt.Println(err)
 			panic("Failed to receive rank: " + err.Error())
 		}
-		fmt.Println("Received rank " + strconv.Itoa(int(binary.LittleEndian.Uint64(buf))))
 
 		SelfRank = binary.LittleEndian.Uint64(buf)
 		// Sync the world state
@@ -340,6 +336,7 @@ func SendBytes(buf []byte, rank uint64) error {
 	} else {
 		_, errorMsg = (*SlaveToMasterTCPConn).Write(buf)
 	}
+	BytesSent += uint64(len(buf))
 	return errorMsg
 }
 
@@ -354,6 +351,7 @@ func ReceiveBytes(size uint64, rank uint64) ([]byte, error) {
 	} else {
 		_, errorMsg = (*SlaveToMasterTCPConn).Read(buf)
 	}
+	BytesReceived += uint64(len(buf))
 	return buf, errorMsg
 }
 
