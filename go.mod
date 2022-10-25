@@ -1,4 +1,4 @@
-module simpleMPI
+module github.com/sunblaze-ucb/simpleMPI
 
 go 1.18
 
