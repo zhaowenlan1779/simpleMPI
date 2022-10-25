@@ -356,6 +356,8 @@ func ReceiveBytes(size uint64, rank uint64) ([]byte, error) {
 }
 
 func Close() {
+	fmt.Println("Bytes sent: " + strconv.Itoa(int(BytesSent)))
+	fmt.Println("Bytes received: " + strconv.Itoa(int(BytesReceived)))
 	if SelfRank == 0 {
 		time.Sleep(1 * time.Second)
 		for i := 1; i < len(MasterToSlaveTCPConn); i++ {
