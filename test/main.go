@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
-	"simpleMPI/mpi"
+
+	"github.com/sunblaze-ucb/simpleMPI/mpi"
 )
 
 func main() {

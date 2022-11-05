@@ -333,12 +333,21 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 func SendBytes(buf []byte, rank uint64) error {
 	var errorMsg error
 	errorMsg = nil
-	if SelfRank == 0 {
-		_, errorMsg = (*MasterToSlaveTCPConn[rank]).Write(buf)
-	} else {
-		_, errorMsg = (*SlaveToMasterTCPConn).Write(buf)
+	BytesSentInThisSession := 0
+	for BytesSentInThisSession < len(buf) {
+		n := 0
+		if SelfRank == 0 {
+			n, errorMsg = (*MasterToSlaveTCPConn[rank]).Write(buf)
+		} else {
+			n, errorMsg = (*SlaveToMasterTCPConn).Write(buf)
+		}
+		if errorMsg != nil {
+			return errorMsg
+		}
+		BytesSentInThisSession += n
+		BytesSent += uint64(n)
+		buf = buf[n:]
 	}
-	BytesSent += uint64(len(buf))
 	return errorMsg
 }
 
@@ -348,12 +357,27 @@ func ReceiveBytes(size uint64, rank uint64) ([]byte, error) {
 	buf := make([]byte, size)
 	var errorMsg error
 	errorMsg = nil
-	if SelfRank == 0 {
-		_, errorMsg = (*MasterToSlaveTCPConn[rank]).Read(buf)
-	} else {
-		_, errorMsg = (*SlaveToMasterTCPConn).Read(buf)
+	BytesRead := uint64(0)
+	for BytesRead < size {
+		n := 0
+		tmpBuf := make([]byte, size-BytesRead)
+		if SelfRank == 0 {
+			(*MasterToSlaveTCPConn[rank]).SetReadDeadline(time.Now().Add(1 * time.Second))
+			n, errorMsg = (*MasterToSlaveTCPConn[rank]).Read(tmpBuf)
+		} else {
+			(*SlaveToMasterTCPConn).SetReadDeadline(time.Now().Add(1 * time.Second))
+			n, errorMsg = (*SlaveToMasterTCPConn).Read(tmpBuf)
+		}
+		buf := append(buf, tmpBuf[:n]...)
+		if errorMsg != nil {
+			if errorMsg.Error() == "EOF" {
+				fmt.Println("EOF")
+			}
+			return buf, errorMsg
+		}
+		BytesReceived += uint64(n)
+		BytesRead += uint64(n)
 	}
-	BytesReceived += uint64(len(buf))
 	return buf, errorMsg
 }
 
