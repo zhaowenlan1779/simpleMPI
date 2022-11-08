@@ -96,6 +96,7 @@ var (
 	SlaveToMasterTCPConn  *net.Conn
 	MasterToSlaveListener []*net.Listener
 	SlaveOutputs          []bytes.Buffer
+	SlaveOutputsErr       []bytes.Buffer
 	BytesSent             uint64
 	BytesReceived         uint64
 	WorldSize             uint64
@@ -173,6 +174,7 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 		}
 		MasterToSlaveTCPConn = make([]*net.Conn, world.size)
 		SlaveOutputs = make([]bytes.Buffer, world.size)
+		SlaveOutputsErr = make([]bytes.Buffer, world.size)
 		MasterToSlaveListener = make([]*net.Listener, world.size)
 		MasterToSlaveTCPConn[0] = nil
 		selfFileLocation, _ := os.Executable()
@@ -222,6 +224,7 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 			go func() {
 				defer session.Close()
 				session.Stdout = &SlaveOutputs[i]
+				session.Stderr = &SlaveOutputsErr[i]
 				err := session.Run(Command)
 
 				if err != nil {
@@ -236,6 +239,11 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 					data, _ := SlaveOutputs[rank].ReadString('\n')
 					if data != "" {
 						fmt.Println("rank " + strconv.Itoa(int(rank)) + " " + data)
+					}
+					data, _ = SlaveOutputsErr[rank].ReadString('\n')
+					if data != "" {
+						ErrorColor := "\033[1;31m%s\033[0m"
+						fmt.Printf(ErrorColor, "rank "+strconv.Itoa(int(rank))+" ERR "+data)
 					}
 					time.Sleep(1 * time.Microsecond)
 				}
@@ -334,7 +342,7 @@ func SendBytes(buf []byte, rank uint64) error {
 	var errorMsg error
 	errorMsg = nil
 	BytesSentInThisSession := 0
-	for BytesSentInThisSession < len(buf) {
+	for len(buf) > 0 {
 		n := 0
 		if SelfRank == 0 {
 			n, errorMsg = (*MasterToSlaveTCPConn[rank]).Write(buf)
@@ -368,7 +376,9 @@ func ReceiveBytes(size uint64, rank uint64) ([]byte, error) {
 			(*SlaveToMasterTCPConn).SetReadDeadline(time.Now().Add(1 * time.Second))
 			n, errorMsg = (*SlaveToMasterTCPConn).Read(tmpBuf)
 		}
-		buf := append(buf, tmpBuf[:n]...)
+		for i := BytesRead; i < BytesRead+uint64(n); i++ {
+			buf[i] = tmpBuf[i-BytesRead]
+		}
 		if errorMsg != nil {
 			if errorMsg.Error() == "EOF" {
 				fmt.Println("EOF")
