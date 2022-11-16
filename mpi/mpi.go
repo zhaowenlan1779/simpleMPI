@@ -3,11 +3,13 @@ package mpi
 import (
 	"bufio"
 	"bytes"
+	"crypto/md5"
 	"encoding/binary"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -275,6 +277,30 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 				panic("Failed to send rank: " + err.Error())
 			}
 
+			// Send the working directory
+			{
+				workingDir, err := os.Getwd()
+				if err != nil {
+					fmt.Println(err)
+					panic("Failed to get working directory: " + err.Error())
+				}
+				//Send string length
+				buf = make([]byte, 8)
+				binary.LittleEndian.PutUint64(buf, uint64(len(workingDir)))
+				_, err = TCPConn.Write(buf)
+				if err != nil {
+					fmt.Println(err)
+					panic("Failed to send working directory length: " + err.Error())
+				}
+				//Send string
+				_, err = TCPConn.Write([]byte(workingDir))
+				if err != nil {
+					fmt.Println(err)
+					panic("Failed to send working directory: " + err.Error())
+				}
+				fmt.Println("Sent working directory to slave " + strconv.Itoa(i))
+			}
+
 			// Sync the world state
 			buf = SerializeWorld(world)
 
@@ -313,6 +339,33 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 			panic("Failed to receive rank: " + err.Error())
 		}
 
+		// Receive the working directory
+		{
+			//Receive string length
+			buf = make([]byte, 8)
+			_, err = TCPConn.Read(buf)
+			if err != nil {
+				fmt.Println(err)
+				panic("Failed to receive working directory length: " + err.Error())
+			}
+			workingDirLength := binary.LittleEndian.Uint64(buf)
+			//Receive string
+			buf = make([]byte, workingDirLength)
+			_, err = TCPConn.Read(buf)
+			if err != nil {
+				fmt.Println(err)
+				panic("Failed to receive working directory: " + err.Error())
+			}
+			workingDir := string(buf)
+			err = os.Chdir(workingDir)
+			if err != nil {
+				fmt.Println(err)
+				panic("Failed to change working directory: " + err.Error())
+			}
+			workingDir, _ = os.Getwd()
+			fmt.Println("Changed working directory to " + workingDir)
+		}
+
 		SelfRank = binary.LittleEndian.Uint64(buf)
 		// Sync the world state
 		// Receive buf size
@@ -338,10 +391,14 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 
 // If Master calls this function, rank is required
 // If Slave calls this function, rank is not required, it will send to Master
+var sentBytes []byte
+var recvBytes []byte
+
 func SendBytes(buf []byte, rank uint64) error {
 	var errorMsg error
 	errorMsg = nil
 	BytesSentInThisSession := 0
+	sentBytes = append(sentBytes, buf...)
 	for len(buf) > 0 {
 		n := 0
 		if SelfRank == 0 {
@@ -350,6 +407,7 @@ func SendBytes(buf []byte, rank uint64) error {
 			n, errorMsg = (*SlaveToMasterTCPConn).Write(buf)
 		}
 		if errorMsg != nil {
+			fmt.Println(string(debug.Stack()))
 			return errorMsg
 		}
 		BytesSentInThisSession += n
@@ -370,10 +428,10 @@ func ReceiveBytes(size uint64, rank uint64) ([]byte, error) {
 		n := 0
 		tmpBuf := make([]byte, size-BytesRead)
 		if SelfRank == 0 {
-			(*MasterToSlaveTCPConn[rank]).SetReadDeadline(time.Now().Add(1 * time.Second))
+			(*MasterToSlaveTCPConn[rank]).SetReadDeadline(time.Now().Add(10 * time.Second))
 			n, errorMsg = (*MasterToSlaveTCPConn[rank]).Read(tmpBuf)
 		} else {
-			(*SlaveToMasterTCPConn).SetReadDeadline(time.Now().Add(1 * time.Second))
+			(*SlaveToMasterTCPConn).SetReadDeadline(time.Now().Add(10 * time.Second))
 			n, errorMsg = (*SlaveToMasterTCPConn).Read(tmpBuf)
 		}
 		for i := BytesRead; i < BytesRead+uint64(n); i++ {
@@ -383,43 +441,35 @@ func ReceiveBytes(size uint64, rank uint64) ([]byte, error) {
 			if errorMsg.Error() == "EOF" {
 				fmt.Println("EOF")
 			}
+			fmt.Println(string(debug.Stack()))
 			return buf, errorMsg
 		}
 		BytesReceived += uint64(n)
 		BytesRead += uint64(n)
 	}
+	recvBytes = append(recvBytes, buf...)
 	return buf, errorMsg
+}
+
+func GetHash(str string) {
+	fmt.Println(str + " Bytes sent: " + strconv.Itoa(int(BytesSent)))
+	fmt.Println(str + " Bytes received: " + strconv.Itoa(int(BytesReceived)))
+	fmt.Println(str + " Sent hash: " + fmt.Sprintf("%x", md5.Sum(sentBytes)))
+	fmt.Println(str + " Received hash: " + fmt.Sprintf("%x", md5.Sum(recvBytes)))
 }
 
 func Close() {
 	fmt.Println("Bytes sent: " + strconv.Itoa(int(BytesSent)))
 	fmt.Println("Bytes received: " + strconv.Itoa(int(BytesReceived)))
+	fmt.Println("Sent hash: " + fmt.Sprintf("%x", md5.Sum(sentBytes)))
+	fmt.Println("Received hash: " + fmt.Sprintf("%x", md5.Sum(recvBytes)))
 	if SelfRank == 0 {
 		time.Sleep(1 * time.Second)
 		for i := 1; i < len(MasterToSlaveTCPConn); i++ {
-			//Wait for slave to send finish signal
-			buf := make([]byte, 8)
-			_, err := (*MasterToSlaveTCPConn[i]).Read(buf)
-			if err != nil {
-				fmt.Println(err)
-				panic("Failed to receive finish signal: " + err.Error())
-			}
-			if binary.LittleEndian.Uint64(buf) != 0xdeadbeef {
-				panic("Slave " + strconv.Itoa(i) + " did not send finish signal")
-			}
 			(*MasterToSlaveTCPConn[i]).Close()
 			(*MasterToSlaveListener[i]).Close()
 		}
 	} else {
-		// Send finish signal
-		buf := make([]byte, 8)
-		binary.LittleEndian.PutUint64(buf, 0xdeadbeef)
-		_, err := (*SlaveToMasterTCPConn).Write(buf)
-		if err != nil {
-			fmt.Println(err)
-			panic("Failed to send finish signal: " + err.Error())
-		}
-
 		(*SlaveToMasterTCPConn).Close()
 	}
 }
