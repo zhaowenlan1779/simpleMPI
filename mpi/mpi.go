@@ -338,7 +338,7 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 			fmt.Println(err)
 			panic("Failed to receive rank: " + err.Error())
 		}
-
+		SelfRank = binary.LittleEndian.Uint64(buf)
 		// Receive the working directory
 		{
 			//Receive string length
@@ -366,7 +366,6 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 			fmt.Println("Changed working directory to " + workingDir)
 		}
 
-		SelfRank = binary.LittleEndian.Uint64(buf)
 		// Sync the world state
 		// Receive buf size
 		bufSize := make([]byte, 8)
