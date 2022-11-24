@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"os"
 	"runtime/debug"
@@ -115,13 +116,21 @@ func SetIPPool(filePath string, world *MPIWorld) error {
 	scanner := bufio.NewScanner(ipFile)
 	for scanner.Scan() {
 		line := scanner.Text()
-		//port and IP are separated by a :
-		world.IPPool = append(world.IPPool, strings.Split(line, ":")[0])
-		portNum, err := strconv.Atoi(strings.Split(line, ":")[1])
+		fmt.Println(line)
+		//IP and hostname are separated by a space
+		world.IPPool = append(world.IPPool, strings.Split(line, " ")[0])
+		hostname := strings.Split(line, " ")[1]
+
+		//if hostname doesn't start with "node" or "master" we skip
+		if !(hostname[:4] == "node" || (len(hostname) >= 6 && hostname[:6] == "master")) {
+			continue
+		}
 		if err != nil {
 			return err
 		}
-		world.Port = append(world.Port, uint64(portNum))
+		// get a random port number betwee 10000 and 20000
+		port := uint64(10000 + rand.Intn(10000))
+		world.Port = append(world.Port, uint64(port))
 		world.rank = append(world.rank, world.size)
 		world.size++
 	}
@@ -154,7 +163,45 @@ func checkSlave() bool {
 	return strings.ToLower(LastCommand) == "slave"
 }
 
-func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MPIWorld {
+type config struct {
+	User    string
+	KeyFile string
+	Verbose bool
+}
+
+func ParseConfig(ConfigFilePath string) config {
+	// parse the config file
+	// format: user, keyfile, verbose
+	// user: string
+	// keyfile: string
+	// verbose: bool
+	config := config{}
+	configFile, err := os.Open(ConfigFilePath)
+	if err != nil {
+		panic(err)
+	}
+	defer configFile.Close()
+	scanner := bufio.NewScanner(configFile)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "user") {
+			config.User = strings.Split(line, " ")[1]
+		} else if strings.HasPrefix(line, "keyfile") {
+			config.KeyFile = strings.Split(line, " ")[1]
+		} else if strings.HasPrefix(line, "verbose") {
+			config.Verbose, err = strconv.ParseBool(strings.Split(line, " ")[1])
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		panic(err)
+	}
+	return config
+}
+
+func WorldInit(HostFilePath string, ConfigFilePath string) *MPIWorld {
 	world := new(MPIWorld)
 	world.size = 0
 	world.rank = make([]uint64, 0)
@@ -166,10 +213,12 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 
 	isSlave := checkSlave()
 
+	configuration := ParseConfig(ConfigFilePath)
+
 	//Setup TCP connections master <--> slaves
 
 	if !isSlave {
-		err := SetIPPool(IPfilePath, world)
+		err := SetIPPool(HostFilePath, world)
 		if err != nil {
 			fmt.Println(err)
 			panic(err)
@@ -187,7 +236,8 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 			slaveRank := uint64(i)
 
 			// Start slave process via ssh
-			key, err := ioutil.ReadFile(SSHKeyFilePath)
+			fmt.Println(configuration.KeyFile)
+			key, err := ioutil.ReadFile(configuration.KeyFile)
 			if err != nil {
 				fmt.Printf("unable to read private key: %v\n", err)
 				panic("Failed to load key")
@@ -197,8 +247,9 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 				fmt.Printf("unable to parse private key: %v\n", err)
 				panic("Failed to parse key")
 			}
+			fmt.Println(slaveIP)
 			conn, err := ssh.Dial("tcp", slaveIP+":"+strconv.Itoa(int(22)), &ssh.ClientConfig{
-				User: SSHUserName,
+				User: configuration.User,
 				Auth: []ssh.AuthMethod{
 					ssh.PublicKeys(signer),
 				},
@@ -231,7 +282,6 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 
 				if err != nil {
 					fmt.Println(err)
-					panic(err)
 				}
 			}()
 
@@ -339,6 +389,7 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 			panic("Failed to receive rank: " + err.Error())
 		}
 		SelfRank = binary.LittleEndian.Uint64(buf)
+
 		// Receive the working directory
 		{
 			//Receive string length

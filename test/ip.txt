@@ -1,2 +1,2 @@
-localhost:6666
-localhost:6670
+localhost master
+localhost node001

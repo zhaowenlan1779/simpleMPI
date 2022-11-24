@@ -9,7 +9,7 @@ import (
 
 func main() {
 	fmt.Println("Hello, playground", os.Args)
-	world := mpi.WorldInit("ip.txt", "id_ed25519", "farmer")
+	world := mpi.WorldInit("/etc/hosts", "config")
 	fmt.Println(world)
 	mpi.Close()
 }
