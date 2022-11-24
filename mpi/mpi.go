@@ -124,14 +124,14 @@ func SetIPPool(filePath string, world *MPIWorld) error {
 		if len(line) == 0 {
 			continue
 		}
-
-		world.IPPool = append(world.IPPool, strings.Split(line, " ")[0])
 		hostname := strings.Split(line, " ")[1]
-
 		//if hostname doesn't start with "node" we skip
 		if !(hostname[:4] == "node" || (len(hostname) >= 6 && hostname[:6] == "master")) {
 			continue
 		}
+
+		world.IPPool = append(world.IPPool, strings.Split(line, " ")[0])
+
 		if err != nil {
 			return err
 		}
