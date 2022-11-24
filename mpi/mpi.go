@@ -116,8 +116,15 @@ func SetIPPool(filePath string, world *MPIWorld) error {
 	scanner := bufio.NewScanner(ipFile)
 	for scanner.Scan() {
 		line := scanner.Text()
-		fmt.Println(line)
 		//IP and hostname are separated by a space
+
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		if len(line) == 0 {
+			continue
+		}
+
 		world.IPPool = append(world.IPPool, strings.Split(line, " ")[0])
 		hostname := strings.Split(line, " ")[1]
 
