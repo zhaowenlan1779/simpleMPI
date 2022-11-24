@@ -220,11 +220,10 @@ func WorldInit(HostFilePath string, ConfigFilePath string) *MPIWorld {
 
 	isSlave := checkSlave()
 
-	configuration := ParseConfig(ConfigFilePath)
-
 	//Setup TCP connections master <--> slaves
 
 	if !isSlave {
+		configuration := ParseConfig(ConfigFilePath)
 		err := SetIPPool(HostFilePath, world)
 		if err != nil {
 			fmt.Println(err)
