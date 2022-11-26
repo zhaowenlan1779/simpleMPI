@@ -484,10 +484,10 @@ func ReceiveBytes(size uint64, rank uint64) ([]byte, error) {
 		n := 0
 		tmpBuf := make([]byte, size-BytesRead)
 		if SelfRank == 0 {
-			(*MasterToSlaveTCPConn[rank]).SetReadDeadline(time.Now().Add(10 * time.Second))
+			(*MasterToSlaveTCPConn[rank]).SetReadDeadline(time.Now().Add(1000 * time.Second))
 			n, errorMsg = (*MasterToSlaveTCPConn[rank]).Read(tmpBuf)
 		} else {
-			(*SlaveToMasterTCPConn).SetReadDeadline(time.Now().Add(10 * time.Second))
+			(*SlaveToMasterTCPConn).SetReadDeadline(time.Now().Add(1000 * time.Second))
 			n, errorMsg = (*SlaveToMasterTCPConn).Read(tmpBuf)
 		}
 		for i := BytesRead; i < BytesRead+uint64(n); i++ {
