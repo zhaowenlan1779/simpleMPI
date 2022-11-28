@@ -285,12 +285,13 @@ func WorldInit(HostFilePath string, ConfigFilePath string) *MPIWorld {
 			}
 			Command += " " + world.IPPool[0] + " " + strconv.Itoa(int(world.Port[i]))
 			Command += " Slave"
-
+			stdOutRedirected := make(chan struct{}, 1)
 			//run the command async and panic when command return error
 			go func() {
 				defer session.Close()
 				session.Stdout = &SlaveOutputs[i]
 				session.Stderr = &SlaveOutputsErr[i]
+				close(stdOutRedirected)
 				err := session.Run(Command)
 
 				if err != nil {
@@ -300,6 +301,7 @@ func WorldInit(HostFilePath string, ConfigFilePath string) *MPIWorld {
 
 			go func(rank uint64) {
 				// Print the output of the command
+				<-stdOutRedirected
 				for {
 					data, _ := SlaveOutputs[rank].ReadString('\n')
 					if data != "" && configuration.Verbose {
