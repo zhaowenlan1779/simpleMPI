@@ -308,6 +308,7 @@ func WorldInit(HostFilePath string, ConfigFilePath string) *MPIWorld {
 							if r := recover(); r != nil {
 								fmt.Println("Recovered in f", r)
 							}
+							time.Sleep(1 * time.Second)
 						}()
 						data, _ := SlaveOutputs[rank].ReadString('\n')
 						if data != "" && configuration.Verbose {
