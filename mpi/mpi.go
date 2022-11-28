@@ -303,16 +303,23 @@ func WorldInit(HostFilePath string, ConfigFilePath string) *MPIWorld {
 				// Print the output of the command
 				<-stdOutRedirected
 				for {
-					data, _ := SlaveOutputs[rank].ReadString('\n')
-					if data != "" && configuration.Verbose {
-						fmt.Println("rank " + strconv.Itoa(int(rank)) + " " + data)
-					}
-					data, _ = SlaveOutputsErr[rank].ReadString('\n')
-					if data != "" {
-						ErrorColor := "\033[1;31m%s\033[0m"
-						fmt.Printf(ErrorColor, "rank "+strconv.Itoa(int(rank))+" ERR "+data)
-					}
-					time.Sleep(1 * time.Microsecond)
+					func() {
+						defer func() {
+							if r := recover(); r != nil {
+								fmt.Println("Recovered in f", r)
+							}
+						}()
+						data, _ := SlaveOutputs[rank].ReadString('\n')
+						if data != "" && configuration.Verbose {
+							fmt.Println("rank " + strconv.Itoa(int(rank)) + " " + data)
+						}
+						data, _ = SlaveOutputsErr[rank].ReadString('\n')
+						if data != "" {
+							ErrorColor := "\033[1;31m%s\033[0m"
+							fmt.Printf(ErrorColor, "rank "+strconv.Itoa(int(rank))+" ERR "+data)
+						}
+						time.Sleep(1 * time.Microsecond)
+					}()
 				}
 			}(uint64(i))
 
