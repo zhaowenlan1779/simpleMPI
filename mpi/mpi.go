@@ -306,7 +306,7 @@ func WorldInit(HostFilePath string, ConfigFilePath string) *MPIWorld {
 					func() {
 						defer func() {
 							if r := recover(); r != nil {
-								fmt.Println("Recovered in f", r)
+								fmt.Println("Output err at rank", rank)
 							}
 							time.Sleep(1 * time.Second)
 						}()
