@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"net"
 	"os"
 	"runtime/debug"
@@ -136,8 +135,6 @@ func SetIPPool(filePath string, world *MPIWorld) error {
 			return err
 		}
 		// get a random port number betwee 10000 and 20000
-		port := uint64(10000 + rand.Intn(10000))
-		world.Port = append(world.Port, uint64(port))
 		world.rank = append(world.rank, world.size)
 		world.size++
 	}
@@ -225,6 +222,7 @@ func WorldInit(HostFilePath string, ConfigFilePath string) *MPIWorld {
 	if !isSlave {
 		configuration := ParseConfig(ConfigFilePath)
 		err := SetIPPool(HostFilePath, world)
+		world.Port = make([]uint64, world.size)
 		if err != nil {
 			fmt.Println(err)
 			panic(err)
@@ -238,7 +236,6 @@ func WorldInit(HostFilePath string, ConfigFilePath string) *MPIWorld {
 		SelfRank = 0
 		for i := 1; i < int(world.size); i++ {
 			slaveIP := world.IPPool[i]
-			slavePort := world.Port[i]
 			slaveRank := uint64(i)
 
 			// Start slave process via ssh
@@ -265,6 +262,16 @@ func WorldInit(HostFilePath string, ConfigFilePath string) *MPIWorld {
 			if err != nil {
 				fmt.Println(err)
 				panic("Failed to dial: " + err.Error())
+			}
+
+			// Listen to slave
+
+			listener, err := net.Listen("tcp", ":0")
+			world.Port[i] = uint64(listener.Addr().(*net.TCPAddr).Port)
+			fmt.Println("Slave " + strconv.Itoa(i) + " Listening on port: " + strconv.Itoa(int(world.Port[i])))
+			if err != nil {
+				fmt.Println(err)
+				panic("Failed to listen: " + err.Error())
 			}
 
 			session, err := conn.NewSession()
@@ -307,12 +314,6 @@ func WorldInit(HostFilePath string, ConfigFilePath string) *MPIWorld {
 				}
 			}(uint64(i))
 
-			// Listen to slave
-			listener, err := net.Listen("tcp", ":"+strconv.Itoa(int(slavePort)))
-			if err != nil {
-				fmt.Println(err)
-				panic("Failed to listen: " + err.Error())
-			}
 			// Accept a connection
 			TCPConn, err := listener.Accept()
 
