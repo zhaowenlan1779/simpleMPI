@@ -197,7 +197,7 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 				fmt.Printf("unable to parse private key: %v\n", err)
 				panic("Failed to parse key")
 			}
-			conn, err := ssh.Dial("tcp", slaveIP+":"+strconv.Itoa(int(22)), &ssh.ClientConfig{
+			conn, err := ssh.Dial("tcp", slaveIP+":"+strconv.Itoa(int(16789)), &ssh.ClientConfig{
 				User: SSHUserName,
 				Auth: []ssh.AuthMethod{
 					ssh.PublicKeys(signer),
@@ -225,8 +225,8 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 			//run the command async and panic when command return error
 			go func() {
 				defer session.Close()
-				session.Stdout = &SlaveOutputs[i]
-				session.Stderr = &SlaveOutputsErr[i]
+				session.Stdout = nil
+				session.Stderr = nil
 				err := session.Run(Command)
 
 				if err != nil {
@@ -234,22 +234,6 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 					panic(err)
 				}
 			}()
-
-			go func(rank uint64) {
-				// Print the output of the command
-				for {
-					data, _ := SlaveOutputs[rank].ReadString('\n')
-					if data != "" {
-						fmt.Println("rank " + strconv.Itoa(int(rank)) + " " + data)
-					}
-					data, _ = SlaveOutputsErr[rank].ReadString('\n')
-					if data != "" {
-						ErrorColor := "\033[1;31m%s\033[0m"
-						fmt.Printf(ErrorColor, "rank "+strconv.Itoa(int(rank))+" ERR "+data)
-					}
-					time.Sleep(1 * time.Microsecond)
-				}
-			}(uint64(i))
 
 			// Listen to slave
 			listener, err := net.Listen("tcp", ":"+strconv.Itoa(int(slavePort)))
