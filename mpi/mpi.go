@@ -225,9 +225,14 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 			//run the command async and panic when command return error
 			go func() {
 				defer session.Close()
-				session.Stdout = nil
-				session.Stderr = nil
-				err := session.Run(Command)
+				file, err := os.Create(slaveIP + ".txt")
+				if err != nil {
+					fmt.Println(err)
+					panic(err)
+				}
+				session.Stdout = file
+				session.Stderr = file
+				err = session.Run(Command)
 
 				if err != nil {
 					fmt.Println(err)
