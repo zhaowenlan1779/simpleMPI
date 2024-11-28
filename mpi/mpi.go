@@ -197,7 +197,7 @@ func WorldInit(IPfilePath string, SSHKeyFilePath string, SSHUserName string) *MP
 				fmt.Printf("unable to parse private key: %v\n", err)
 				panic("Failed to parse key")
 			}
-			conn, err := ssh.Dial("tcp", slaveIP+":"+strconv.Itoa(int(16789)), &ssh.ClientConfig{
+			conn, err := ssh.Dial("tcp", slaveIP+":"+strconv.Itoa(int(22)), &ssh.ClientConfig{
 				User: SSHUserName,
 				Auth: []ssh.AuthMethod{
 					ssh.PublicKeys(signer),
